@@ -13,7 +13,7 @@ const userSchema = new mongoose.Schema(
       default: ROLES.READ_ONLY,
     },
     isActive: { type: Boolean, default: true },
-    whatsappPhone: { type: String, default: null, unique: true, sparse: true },
+    whatsappPhone: { type: String, unique: true, sparse: true, trim: true },
     refreshToken: { type: String, default: null },
     deletedAt: { type: Date, default: null },
   },

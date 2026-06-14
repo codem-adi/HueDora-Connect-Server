@@ -33,6 +33,12 @@ export async function ensurePendingEmailClient() {
 }
 
 export async function ensureServiceUsers() {
+  // Sparse unique index ignores missing fields, but multiple explicit nulls collide.
+  await User.updateMany(
+    { $or: [{ whatsappPhone: null }, { whatsappPhone: '' }] },
+    { $unset: { whatsappPhone: '' } },
+  );
+
   for (const bot of SERVICE_BOTS) {
     const email = (process.env[bot.envKey] || bot.defaultEmail).toLowerCase();
     const existing = await User.findOne({ email, deletedAt: null });
