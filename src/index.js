@@ -48,7 +48,7 @@ app.use(
 );
 
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', service: 'k-dashboard-server' });
+  res.json({ status: 'ok', message: 'Server is healthy', service: 'huedora-connect-server' });
 });
 
 app.use('/api/auth', authRoutes);
