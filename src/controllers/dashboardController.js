@@ -11,7 +11,6 @@ const STATUS_LABELS = [
   'executed',
   'rejected',
   'cancelled',
-  'rescheduled',
 ];
 
 export const getDashboardStats = asyncHandler(async (req, res) => {

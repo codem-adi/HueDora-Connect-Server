@@ -1,11 +1,11 @@
 import { extractCampContentFromEmailBody } from './emailBodyNormalizer.js';
-import {
-  parseCampMessageBlock,
+import { parseCampMessageBlock,
   parseCampMessages,
   PENDING_IMPORT_CLIENT_NAME,
   matchClientFromText,
   extractDateFromText,
 } from './campMessageParser.js';
+import { normalizeCampName } from '../config/campNames.js';
 
 export const PENDING_EMAIL_CLIENT_NAME = PENDING_IMPORT_CLIENT_NAME;
 
@@ -58,7 +58,9 @@ export function parseFreeformEmailCamp({ subject = '', bodyText = '', from = '',
   }
 
   if (!parsed.row.campaignName || parsed.row.campaignName === 'Camp Request') {
-    parsed.row.campaignName = cleanSubject || parsed.row.campaignName;
+    parsed.row.campaignName = normalizeCampName(cleanSubject || parsed.row.campaignName);
+  } else {
+    parsed.row.campaignName = normalizeCampName(parsed.row.campaignName);
   }
 
   parsed.row.remarks = buildImportRemarks({

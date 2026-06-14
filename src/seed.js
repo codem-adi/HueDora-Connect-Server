@@ -4,7 +4,6 @@ import { connectDB } from './config/db.js';
 import User from './models/User.js';
 import Client from './models/Client.js';
 import ClientMaster from './models/ClientMaster.js';
-import Campaign from './models/Campaign.js';
 import Camp from './models/Camp.js';
 import { CAMP_NAME_OPTIONS } from './config/campNames.js';
 import { ROLES } from './config/constants.js';
@@ -47,7 +46,6 @@ async function seed() {
     User.deleteMany({}),
     Client.deleteMany({}),
     ClientMaster.deleteMany({}),
-    Campaign.deleteMany({}),
     Camp.deleteMany({}),
   ]);
 
@@ -95,21 +93,7 @@ async function seed() {
     }),
   );
 
-const divisions = ['Classic', 'Premium', 'Active'];
-
-  const campaigns = [];
-  for (const client of seededClients) {
-    for (const division of divisions) {
-      campaigns.push({
-        name: division,
-        division,
-        client: client._id,
-      });
-    }
-  }
-  const seededCampaigns = await Campaign.insertMany(campaigns);
-
-  const statuses = ['pending_review', 'approved', 'executed', 'cancelled', 'rescheduled', 'rejected'];
+  const statuses = ['pending_review', 'approved', 'executed', 'cancelled', 'rejected'];
   const durations = [3, 4, 5, 6, 8];
   const states = ['Maharashtra', 'Gujarat', 'Karnataka', 'Delhi', 'Tamil Nadu'];
   const cities = ['Mumbai', 'Ahmedabad', 'Bengaluru', 'New Delhi', 'Chennai'];
@@ -117,13 +101,9 @@ const divisions = ['Classic', 'Premium', 'Active'];
 
   const camps = Array.from({ length: 24 }, (_, i) => {
     const client = seededClients[i % seededClients.length];
-    const clientCampaigns = seededCampaigns.filter(
-      (item) => String(item.client) === String(client._id)
-    );
-    const campaign = clientCampaigns[i % clientCampaigns.length];
     const masterSeed = clientMasterSeeds.find((row) => row.clientCode === client.code);
     const campCampName = CAMP_NAME_OPTIONS[i % CAMP_NAME_OPTIONS.length];
-    const campDivision = masterSeed?.programName || campaign.division;
+    const campDivision = masterSeed?.programName || 'BMD Camps';
     let status = statuses[i % statuses.length];
     const durationHours = durations[i % durations.length];
     const date = new Date();
@@ -172,7 +152,7 @@ const divisions = ['Classic', 'Premium', 'Active'];
       campId: `${monthKey}-${String(monthCounters[monthKey]).padStart(4, '0')}`,
       client: client._id,
       clientName: client.name,
-      campaign: campaign._id,
+      campaign: null,
       campaignName: campCampName,
       campaignType: campDivision,
       doctorName: `Dr. Sample ${i + 1}`,
@@ -191,7 +171,7 @@ const divisions = ['Classic', 'Premium', 'Active'];
       source: ['email', 'whatsapp', 'excel'][i % 3],
       status,
       createdBy: users[1]._id,
-      approvedBy: ['approved', 'executed', 'cancelled', 'rescheduled'].includes(status)
+      approvedBy: ['approved', 'executed', 'cancelled'].includes(status)
         ? users[1]._id
         : null,
       executedBy: status === 'executed' ? users[2]._id : null,

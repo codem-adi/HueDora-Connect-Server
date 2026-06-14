@@ -50,16 +50,12 @@ export function getCampTimeFrameLabel(camp) {
   return hours ? `${hours} hr camp (${start} - ${end})` : `${start} - ${end}`;
 }
 
-export function canTransition(currentStatus, nextStatus, userRole = null) {
+export function canTransition(currentStatus, nextStatus) {
   const allowed = STATUS_TRANSITIONS[currentStatus] || [];
-  if (allowed.includes(nextStatus)) return true;
-  if (currentStatus === 'executed' && nextStatus === 'rescheduled' && userRole === 'super_admin') {
-    return true;
-  }
-  return false;
+  return allowed.includes(nextStatus);
 }
 
-export const EDITABLE_CAMP_STATUSES = ['pending_review', 'approved', 'rescheduled', 'rejected'];
+export const EDITABLE_CAMP_STATUSES = ['pending_review', 'approved', 'rejected'];
 
 export function isCampEditable(status) {
   return EDITABLE_CAMP_STATUSES.includes(status);

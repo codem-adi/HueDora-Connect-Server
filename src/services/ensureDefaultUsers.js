@@ -22,6 +22,8 @@ export async function ensureDefaultUsers() {
       email,
       password: DEFAULT_PASSWORD,
       role: seedUser.role,
+      signupStatus: 'approved',
+      isActive: true,
     });
 
     console.log(`[auth] Created default user ${email}`);

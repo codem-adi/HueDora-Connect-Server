@@ -1,7 +1,59 @@
 import User from '../models/User.js';
+import { ROLES } from '../config/constants.js';
 import { signAccessToken, signRefreshToken, verifyRefreshToken } from '../utils/jwt.js';
 import { logAudit } from '../services/auditService.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
+import { getEffectiveSignupStatus } from '../utils/userVisibility.js';
+import { validateSignupPayload } from '../utils/userValidation.js';
+import {
+  requestPasswordResetOtp,
+  resetPasswordWithOtp,
+} from '../services/passwordResetService.js';
+
+function loginBlockedMessage(user) {
+  const signupStatus = getEffectiveSignupStatus(user);
+  if (signupStatus === 'pending') {
+    return 'Your account is pending admin approval';
+  }
+  if (signupStatus === 'rejected') {
+    return 'Your signup request was rejected';
+  }
+  if (!user.isActive) {
+    return 'Account is inactive';
+  }
+  return null;
+}
+
+export const signup = asyncHandler(async (req, res) => {
+  const validation = validateSignupPayload(req.body);
+  if (!validation.isValid) {
+    return res.status(400).json({ message: 'Validation failed', errors: validation.errors });
+  }
+
+  const { name, email, password, phone } = validation.value;
+  const existing = await User.findOne({ email, deletedAt: null });
+  if (existing) {
+    return res.status(409).json({
+      message: 'Email is already registered',
+      errors: { email: 'Email is already registered' },
+    });
+  }
+
+  const user = await User.create({
+    name,
+    email,
+    password,
+    phone,
+    role: ROLES.READ_ONLY,
+    signupStatus: 'pending',
+    isActive: false,
+  });
+
+  res.status(201).json({
+    message: 'Signup submitted. An admin will review your request.',
+    user: user.toSafeObject(),
+  });
+});
 
 export const login = asyncHandler(async (req, res) => {
   const { email, password } = req.body;
@@ -16,8 +68,9 @@ export const login = asyncHandler(async (req, res) => {
     return res.status(401).json({ message: 'Invalid credentials' });
   }
 
-  if (!user.isActive) {
-    return res.status(403).json({ message: 'Account is inactive' });
+  const blockedMessage = loginBlockedMessage(user);
+  if (blockedMessage) {
+    return res.status(403).json({ message: blockedMessage });
   }
 
   const accessToken = signAccessToken(user);
@@ -51,8 +104,13 @@ export const refresh = asyncHandler(async (req, res) => {
   const payload = verifyRefreshToken(refreshToken);
   const user = await User.findOne({ _id: payload.sub, refreshToken, deletedAt: null });
 
-  if (!user || !user.isActive) {
+  if (!user) {
     return res.status(401).json({ message: 'Invalid refresh token' });
+  }
+
+  const blockedMessage = loginBlockedMessage(user);
+  if (blockedMessage) {
+    return res.status(403).json({ message: blockedMessage });
   }
 
   const accessToken = signAccessToken(user);
@@ -76,4 +134,31 @@ export const logout = asyncHandler(async (req, res) => {
   });
 
   res.json({ message: 'Logged out successfully' });
+});
+
+export const forgotPassword = asyncHandler(async (req, res) => {
+  const result = await requestPasswordResetOtp(req.body.email);
+  if (!result.ok) {
+    return res.status(result.status).json({
+      message: result.message,
+      errors: result.errors,
+    });
+  }
+
+  res.json({
+    message: result.message,
+    expiresInMinutes: result.expiresInMinutes,
+  });
+});
+
+export const resetPassword = asyncHandler(async (req, res) => {
+  const result = await resetPasswordWithOtp(req.body);
+  if (!result.ok) {
+    return res.status(result.status).json({
+      message: result.message,
+      errors: result.errors,
+    });
+  }
+
+  res.json({ message: result.message });
 });

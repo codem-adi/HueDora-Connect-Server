@@ -19,6 +19,7 @@ import { mapRows, suggestMappings, validateMappedRows } from '../utils/importMap
 import { getMissingStandardHeaders, getStandardMapping } from '../utils/sampleExcel.js';
 import { buildEmailAutoReply } from '../utils/emailReplyTemplates.js';
 import { appendIngestReviewRemarks } from '../utils/ingestReviewNotes.js';
+import { logIngestError } from '../utils/processSafety.js';
 import {
   markEmailMessageHandled,
   wasEmailMessageHandled,
@@ -109,18 +110,26 @@ async function createCampFromEmailRow({
     },
   });
 
-  await logAudit({
-    user: createdBy,
-    ip: 'email',
-    entityType: 'camp',
-    entityId: camp._id,
-    action: 'create_email',
-    afterValue: {
+  try {
+    await logAudit({
+      user: createdBy,
+      ip: 'email',
+      entityType: 'camp',
+      entityId: camp._id,
+      action: 'create_email',
+      afterValue: {
+        campId: camp.campId,
+        emailIngestId: ingestId,
+        sender: emailMeta.from,
+      },
+    });
+  } catch (auditError) {
+    logIngestError('email', auditError, {
+      action: 'audit',
       campId: camp.campId,
-      emailIngestId: ingestId,
-      sender: emailMeta.from,
-    },
-  });
+      ingestId,
+    });
+  }
 
   console.log(
     `[email] Camp created | campId=${camp.campId} | from=${emailMeta.from} | subject="${emailMeta.subject}" | row=${rowNumber}${row.partial ? ' | needsReview=true' : ''}`
@@ -153,30 +162,56 @@ async function processExcelAttachments(attachments, emailMeta, createdBy, submit
   const results = [];
 
   for (const [fileIndex, file] of excelFiles.entries()) {
-    const parsed = parseExcelBuffer(file.content);
-    const mapping = buildMappingForExcel(parsed.headers);
-    const mappedRows = mapRows(parsed.rows, mapping);
-    const { validRows, invalidRows } = validateMappedRows(mappedRows);
+    try {
+      const parsed = parseExcelBuffer(file.content);
+      const mapping = buildMappingForExcel(parsed.headers);
+      const mappedRows = mapRows(parsed.rows, mapping);
+      const { validRows, invalidRows } = validateMappedRows(mappedRows);
 
-    for (const row of validRows) {
-      const result = await createCampFromEmailRow({
-        row,
-        rowNumber: `x${fileIndex + 1}-${row.rowNumber}`,
-        messageId: emailMeta.messageId,
-        emailMeta,
-        createdBy,
-        submittedAt,
+      for (const row of validRows) {
+        try {
+          const result = await createCampFromEmailRow({
+            row,
+            rowNumber: `x${fileIndex + 1}-${row.rowNumber}`,
+            messageId: emailMeta.messageId,
+            emailMeta,
+            createdBy,
+            submittedAt,
+          });
+          results.push(result);
+        } catch (error) {
+          logIngestError('email', error, {
+            action: 'excel-row',
+            rowNumber: `x${fileIndex + 1}-${row.rowNumber}`,
+            messageId: emailMeta.messageId,
+          });
+          results.push({
+            status: 'invalid',
+            rowNumber: `x${fileIndex + 1}-${row.rowNumber}`,
+            errors: [error.message],
+          });
+        }
+      }
+
+      invalidRows.forEach((invalid) => {
+        results.push({
+          status: 'invalid',
+          rowNumber: `x${fileIndex + 1}-${invalid.rowNumber}`,
+          errors: invalid.errors,
+        });
       });
-      results.push(result);
-    }
-
-    invalidRows.forEach((invalid) => {
+    } catch (error) {
+      logIngestError('email', error, {
+        action: 'excel-file',
+        file: file.filename,
+        messageId: emailMeta.messageId,
+      });
       results.push({
         status: 'invalid',
-        rowNumber: `x${fileIndex + 1}-${invalid.rowNumber}`,
-        errors: invalid.errors,
+        rowNumber: `x${fileIndex + 1}`,
+        errors: [error.message],
       });
-    });
+    }
   }
 
   return results;
@@ -202,21 +237,48 @@ async function processEmailBody(bodyText, emailMeta, createdBy, submittedAt) {
       continue;
     }
 
-    const result = await createCampFromEmailRow({
-      row: { ...camp.row, partial: camp.partial },
-      rowNumber: camp.rowNumber,
-      messageId: emailMeta.messageId,
-      emailMeta,
-      createdBy,
-      submittedAt,
-    });
-    results.push({ ...result, partial: camp.partial, partialFields: camp.partialFields });
+    try {
+      const result = await createCampFromEmailRow({
+        row: { ...camp.row, partial: camp.partial },
+        rowNumber: camp.rowNumber,
+        messageId: emailMeta.messageId,
+        emailMeta,
+        createdBy,
+        submittedAt,
+      });
+      results.push({ ...result, partial: camp.partial, partialFields: camp.partialFields });
+    } catch (error) {
+      logIngestError('email', error, {
+        action: 'body-row',
+        rowNumber: camp.rowNumber,
+        messageId: emailMeta.messageId,
+      });
+      results.push({
+        status: 'invalid',
+        rowNumber: camp.rowNumber,
+        errors: [error.message],
+      });
+    }
   }
 
   return results;
 }
 
 export async function processIncomingEmail(email, channel = 'unknown') {
+  try {
+    return await processIncomingEmailUnsafe(email, channel);
+  } catch (error) {
+    const messageId = String(email?.messageId || `${Date.now()}`).trim();
+    logIngestError('email', error, { action: 'process', channel, messageId });
+    return {
+      status: 'error',
+      messageId,
+      error: error.message || 'Email processing failed',
+    };
+  }
+}
+
+async function processIncomingEmailUnsafe(email, channel = 'unknown') {
   const from = normalizeEmailAddress(email.from);
   const subject = String(email.subject || '').trim();
   const messageId = String(email.messageId || `${Date.now()}`).trim();
@@ -245,11 +307,15 @@ export async function processIncomingEmail(email, channel = 'unknown') {
   };
 
   if (isHelpEmail(subject, bodyText)) {
-    await sendEmailReply({
-      to: from,
-      subject: 'HueDora Connect — camp email format',
-      text: EMAIL_HELP_TEXT,
-    });
+    try {
+      await sendEmailReply({
+        to: from,
+        subject: 'HueDora Connect — camp email format',
+        text: EMAIL_HELP_TEXT,
+      });
+    } catch (error) {
+      logIngestError('email', error, { action: 'help-reply', messageId, from });
+    }
     return { status: 'help_sent', messageId };
   }
 
@@ -276,11 +342,15 @@ export async function processIncomingEmail(email, channel = 'unknown') {
   });
 
   if (isEmailReplyEnabled()) {
-    await sendEmailReply({
-      to: from,
-      subject: `Re: ${subject || 'Camp submission'}`,
-      text: replyText,
-    });
+    try {
+      await sendEmailReply({
+        to: from,
+        subject: `Re: ${subject || 'Camp submission'}`,
+        text: replyText,
+      });
+    } catch (error) {
+      logIngestError('email', error, { action: 'auto-reply', messageId, from });
+    }
   } else {
     console.log('[email] No reply sent — EMAIL_REPLY_ENABLED=false');
   }
@@ -328,7 +398,10 @@ export async function pollImapInbox() {
         await markEmailAsSeen(email.uid);
       }
     } catch (error) {
-      console.error('[email] Failed to process IMAP message:', error.message);
+      logIngestError('email', error, {
+        action: 'imap-message',
+        messageId: email.messageId,
+      });
       summaries.push({
         status: 'error',
         messageId: email.messageId,

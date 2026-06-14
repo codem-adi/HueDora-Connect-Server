@@ -1,7 +1,7 @@
 import Camp from '../models/Camp.js';
 import Client from '../models/Client.js';
 import Campaign from '../models/Campaign.js';
-import { ROLES } from '../config/constants.js';
+import { ROLES, ROLE_PERMISSIONS, CANCELLATION_SOURCES } from '../config/constants.js';
 import { logAudit } from '../services/auditService.js';
 import { normalizeCampName } from '../config/campNames.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
@@ -179,10 +179,30 @@ export const createCamp = asyncHandler(async (req, res) => {
   res.status(201).json({ data: withCampSchedule(camp) });
 });
 
+function userHasCampPermission(user, permissions = []) {
+  const rolePerms = ROLE_PERMISSIONS[user.role] || [];
+  if (rolePerms.includes('*')) return true;
+  return permissions.some((permission) => rolePerms.includes(permission));
+}
+
+function userCanFullyUpdateCamp(user) {
+  return userHasCampPermission(user, ['camps:update', 'camps:approve']);
+}
+
+function userCanEditPendingCamp(user) {
+  return userHasCampPermission(user, ['camps:edit-pending']);
+}
+
 export const updateCamp = asyncHandler(async (req, res) => {
   const camp = await Camp.findOne({ _id: req.params.id, deletedAt: null });
   if (!camp) {
     return res.status(404).json({ message: 'Camp not found' });
+  }
+
+  if (!userCanFullyUpdateCamp(req.user)) {
+    if (!userCanEditPendingCamp(req.user) || camp.status !== 'pending_review') {
+      return res.status(403).json({ message: 'You can only edit camps that are pending review' });
+    }
   }
 
   if (!isCampEditable(camp.status)) {
@@ -223,7 +243,9 @@ export const updateCamp = asyncHandler(async (req, res) => {
 
   editableFields.forEach((field) => {
     if (req.body[field] !== undefined) {
-      camp[field] = req.body[field];
+      camp[field] = field === 'campaignName'
+        ? normalizeCampName(req.body[field])
+        : req.body[field];
     }
   });
 
@@ -255,24 +277,23 @@ export const updateCamp = asyncHandler(async (req, res) => {
   res.json({ data: withCampSchedule(camp) });
 });
 
-function applyRescheduleFields(camp, body) {
-  if (body.campDate !== undefined) {
-    const parsedDate = parseLocalDateInput(body.campDate);
-    if (!parsedDate) {
-      const error = new Error('Invalid camp date');
-      error.status = 400;
-      throw error;
-    }
-    camp.campDate = parsedDate;
+function validateCancellationPayload(body) {
+  const cancelledBy = String(body?.cancelledBy || '').trim().toLowerCase();
+  const remarks = String(body?.remarks || '').trim();
+
+  if (!CANCELLATION_SOURCES.includes(cancelledBy)) {
+    const error = new Error('Select who cancelled the camp: brand or KHW');
+    error.status = 400;
+    throw error;
   }
 
-  if (body.startTime !== undefined) camp.startTime = body.startTime;
-  if (body.durationHours !== undefined) camp.durationHours = Number(body.durationHours) || camp.durationHours;
-  if (body.endTime !== undefined) camp.endTime = body.endTime;
-
-  if (body.durationHours !== undefined || body.startTime !== undefined) {
-    camp.endTime = body.endTime || computeEndTime(camp.startTime, camp.durationHours);
+  if (!remarks) {
+    const error = new Error('Cancellation remark is required');
+    error.status = 400;
+    throw error;
   }
+
+  return { cancelledBy, remarks };
 }
 
 async function transitionCamp(req, res, nextStatus, action) {
@@ -281,7 +302,7 @@ async function transitionCamp(req, res, nextStatus, action) {
     return res.status(404).json({ message: 'Camp not found' });
   }
 
-  if (!canTransition(camp.status, nextStatus, req.user.role)) {
+  if (!canTransition(camp.status, nextStatus)) {
     return res.status(400).json({
       message: `Cannot transition from ${camp.status} to ${nextStatus}`,
     });
@@ -314,15 +335,15 @@ async function transitionCamp(req, res, nextStatus, action) {
     camp.executedAt = new Date();
   }
 
-  if (nextStatus === 'rescheduled') {
+  if (nextStatus === 'cancelled') {
     try {
-      applyRescheduleFields(camp, req.body || {});
+      const cancellation = validateCancellationPayload(req.body);
+      camp.cancelledBy = cancellation.cancelledBy;
+      camp.remarks = cancellation.remarks;
     } catch (err) {
-      return res.status(err.status || 400).json({ message: err.message || 'Invalid reschedule details' });
+      return res.status(err.status || 400).json({ message: err.message || 'Invalid cancellation details' });
     }
-  }
-
-  if (req.body?.remarks) {
+  } else if (req.body?.remarks) {
     camp.remarks = req.body.remarks;
   }
 
@@ -341,12 +362,11 @@ async function transitionCamp(req, res, nextStatus, action) {
   res.json({ data: withCampSchedule(camp) });
 }
 
-export const submitForReview = (req, res) => transitionCamp(req, res, 'pending_review', 'submit_review');
-export const approveCamp = (req, res) => transitionCamp(req, res, 'approved', 'approve');
-export const rejectCamp = (req, res) => transitionCamp(req, res, 'rejected', 'reject');
-export const cancelCamp = (req, res) => transitionCamp(req, res, 'cancelled', 'cancel');
-export const rescheduleCamp = (req, res) => transitionCamp(req, res, 'rescheduled', 'reschedule');
-export const executeCamp = (req, res) => transitionCamp(req, res, 'executed', 'execute');
+export const submitForReview = asyncHandler(async (req, res) => transitionCamp(req, res, 'pending_review', 'submit_review'));
+export const approveCamp = asyncHandler(async (req, res) => transitionCamp(req, res, 'approved', 'approve'));
+export const rejectCamp = asyncHandler(async (req, res) => transitionCamp(req, res, 'rejected', 'reject'));
+export const cancelCamp = asyncHandler(async (req, res) => transitionCamp(req, res, 'cancelled', 'cancel'));
+export const executeCamp = asyncHandler(async (req, res) => transitionCamp(req, res, 'executed', 'execute'));
 
 export const softDeleteCamp = asyncHandler(async (req, res) => {
   const camp = await Camp.findOne({ _id: req.params.id, deletedAt: null });
@@ -376,18 +396,18 @@ export const softDeleteCamp = asyncHandler(async (req, res) => {
 });
 
 const BULK_ACTIONS = {
-  approve: { nextStatus: 'approved', from: ['pending_review'], action: 'bulk_approve' },
-  reject: { nextStatus: 'rejected', from: ['pending_review'], action: 'bulk_reject' },
-  execute: { nextStatus: 'executed', from: ['approved'], action: 'bulk_execute' },
-  reschedule: { nextStatus: 'rescheduled', from: ['approved', 'executed'], action: 'bulk_reschedule' },
-  delete: { action: 'bulk_delete' },
+  approve: { nextStatus: 'approved', from: ['pending_review'], action: 'bulk_approve', permissions: ['camps:approve', 'camps:review'] },
+  reject: { nextStatus: 'rejected', from: ['pending_review'], action: 'bulk_reject', permissions: ['camps:approve'] },
+  execute: { nextStatus: 'executed', from: ['approved'], action: 'bulk_execute', permissions: ['camps:execute'] },
+  delete: { action: 'bulk_delete', permissions: ['camps:update', 'camps:approve'] },
 };
 
-function canBulkTransition(camp, nextStatus, userRole) {
-  if (nextStatus === 'rescheduled' && camp.status === 'executed') {
-    return userRole === ROLES.SUPER_ADMIN;
-  }
-  return canTransition(camp.status, nextStatus, userRole);
+function userCanPerformCampAction(user, permissions = []) {
+  return userHasCampPermission(user, permissions);
+}
+
+function canBulkTransition(camp, nextStatus) {
+  return canTransition(camp.status, nextStatus);
 }
 
 export const bulkAction = asyncHandler(async (req, res) => {
@@ -400,6 +420,10 @@ export const bulkAction = asyncHandler(async (req, res) => {
   const config = BULK_ACTIONS[action];
   if (!config) {
     return res.status(400).json({ message: 'Invalid bulk action' });
+  }
+
+  if (!userCanPerformCampAction(req.user, config.permissions)) {
+    return res.status(403).json({ message: 'Insufficient permissions for this bulk action' });
   }
 
   const camps = await Camp.find({ _id: { $in: ids }, deletedAt: null });
@@ -428,12 +452,10 @@ export const bulkAction = asyncHandler(async (req, res) => {
       }
 
       if (config.from && !config.from.includes(camp.status)) {
-        if (!(action === 'reschedule' && camp.status === 'executed' && req.user.role === ROLES.SUPER_ADMIN)) {
-          throw new Error(`Camp ${camp.campId} is ${camp.status} and cannot be ${action}d`);
-        }
+        throw new Error(`Camp ${camp.campId} is ${camp.status} and cannot be ${action}d`);
       }
 
-      if (!canBulkTransition(camp, config.nextStatus, req.user.role)) {
+      if (!canBulkTransition(camp, config.nextStatus)) {
         throw new Error(`Camp ${camp.campId} cannot move to ${config.nextStatus}`);
       }
 

@@ -24,7 +24,7 @@ async function ensureUniqueCode(baseCode) {
   return code;
 }
 
-export async function resolveClient({ clientId, clientName, clientCode }) {
+export async function resolveClient({ clientId, clientName, clientCode, allowCreate = true }) {
   if (clientId) {
     const byId = await Client.findOne({ _id: clientId, deletedAt: null });
     if (byId) return byId;
@@ -36,6 +36,10 @@ export async function resolveClient({ clientId, clientName, clientCode }) {
   const existing = await Client.findOne({ deletedAt: null, name });
   if (existing) return existing;
 
+  if (!allowCreate) {
+    return null;
+  }
+
   const requestedCode = String(clientCode || '').trim().toUpperCase();
   const code = requestedCode || await ensureUniqueCode(buildClientCode(name));
   if (await Client.findOne({ deletedAt: null, code })) {
@@ -43,6 +47,10 @@ export async function resolveClient({ clientId, clientName, clientCode }) {
   }
 
   return Client.create({ name, code, isActive: true });
+}
+
+export async function resolveExistingClient({ clientId, clientName }) {
+  return resolveClient({ clientId, clientName, allowCreate: false });
 }
 
 export const listClients = asyncHandler(async (req, res) => {

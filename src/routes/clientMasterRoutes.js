@@ -19,7 +19,11 @@ const router = Router();
 router.use(authenticate);
 
 router.get('/', authorize('client-masters:read'), listClientMasters);
-router.get('/by-client/:clientId/divisions', authorize('client-masters:read'), listDivisionsByClient);
+router.get(
+  '/by-client/:clientId/divisions',
+  authorize('client-masters:read', 'camps:edit-pending', 'camps:update', 'camps:create'),
+  listDivisionsByClient
+);
 router.get('/by-client/:clientId', authorize('client-masters:read'), listClientMastersByClient);
 router.post('/', authorize('client-masters:create'), createClientMaster);
 

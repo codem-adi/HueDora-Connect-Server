@@ -29,8 +29,8 @@ export const CAMP_IMPORT_FIELDS = [
 
 const HEADER_ALIASES = {
   clientName: ['client name', 'client', 'company', 'pharma', 'pharma client'],
-  campaignName: ['campaign name', 'campaign', 'program name'],
-  campaignType: ['campaign type', 'type', 'screening type', 'test type'],
+  campaignName: ['camp name', 'campaign name', 'campaign', 'program name'],
+  campaignType: ['division / bu', 'division', 'business unit', 'campaign type', 'program', 'programme'],
   doctorName: ['doctor name', 'dr name', 'doctor', 'physician', 'hcp name'],
   doctorCode: ['doctor code', 'dr code', 'hcp code'],
   scCode: ['sc code', 'sales code'],

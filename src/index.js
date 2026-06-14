@@ -11,6 +11,7 @@ import dashboardRoutes from './routes/dashboardRoutes.js';
 import clientRoutes from './routes/clientRoutes.js';
 import clientMasterRoutes from './routes/clientMasterRoutes.js';
 import importRoutes from './routes/importRoutes.js';
+import userRoutes from './routes/userRoutes.js';
 import whatsappRoutes from './routes/whatsappRoutes.js';
 import emailRoutes from './routes/emailRoutes.js';
 import { errorHandler, notFound } from './middleware/errorHandler.js';
@@ -19,7 +20,11 @@ import { startEmailPoller } from './services/emailPoller.js';
 import { ensureServiceUsers } from './services/ensureServiceUsers.js';
 import { ensureDefaultUsers } from './services/ensureDefaultUsers.js';
 import { ensureCampIndexes } from './services/ensureCampIndexes.js';
+import { ensureCampDataIntegrity } from './services/ensureCampDataIntegrity.js';
 import { ensureProgramDocumentsDir } from './utils/programDocumentStorage.js';
+import { registerProcessSafetyHandlers } from './utils/processSafety.js';
+
+registerProcessSafetyHandlers();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -52,6 +57,7 @@ app.use('/api/clients', clientRoutes);
 app.use('/api/client-masters', clientMasterRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/import', importRoutes);
+app.use('/api/users', userRoutes);
 
 app.use(notFound);
 app.use(errorHandler);
@@ -60,6 +66,7 @@ async function start() {
   const uri = process.env.MONGODB_URI || 'mongodb://localhost:27017/k_dashboard';
   await connectDB(uri);
   await ensureCampIndexes();
+  await ensureCampDataIntegrity();
   await ensureProgramDocumentsDir();
   await ensureServiceUsers();
   await ensureDefaultUsers();

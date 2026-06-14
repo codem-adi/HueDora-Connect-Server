@@ -13,6 +13,12 @@ const userSchema = new mongoose.Schema(
       default: ROLES.READ_ONLY,
     },
     isActive: { type: Boolean, default: true },
+    signupStatus: {
+      type: String,
+      enum: ['approved', 'pending', 'rejected'],
+      default: 'approved',
+    },
+    phone: { type: String, trim: true, default: '' },
     whatsappPhone: { type: String, unique: true, sparse: true, trim: true },
     refreshToken: { type: String, default: null },
     deletedAt: { type: Date, default: null },
@@ -37,6 +43,8 @@ userSchema.methods.toSafeObject = function toSafeObject() {
     email: this.email,
     role: this.role,
     isActive: this.isActive,
+    signupStatus: this.signupStatus || 'approved',
+    phone: this.phone || '',
     createdAt: this.createdAt,
     updatedAt: this.updatedAt,
   };

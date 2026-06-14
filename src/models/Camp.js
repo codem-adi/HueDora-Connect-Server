@@ -1,6 +1,6 @@
 import mongoose from 'mongoose';
-import { CAMP_NAME_OPTIONS } from '../config/campNames.js';
-import { CAMP_SOURCES, CAMP_STATUSES } from '../config/constants.js';
+import { CAMP_NAME_OPTIONS, normalizeCampName } from '../config/campNames.js';
+import { CAMP_SOURCES, CAMP_STATUSES, CANCELLATION_SOURCES } from '../config/constants.js';
 
 const campSchema = new mongoose.Schema(
   {
@@ -8,7 +8,12 @@ const campSchema = new mongoose.Schema(
     client: { type: mongoose.Schema.Types.ObjectId, ref: 'Client', required: true },
     clientName: { type: String, required: true },
     campaign: { type: mongoose.Schema.Types.ObjectId, ref: 'Campaign' },
-    campaignName: { type: String, enum: CAMP_NAME_OPTIONS, required: true },
+    campaignName: {
+      type: String,
+      enum: CAMP_NAME_OPTIONS,
+      required: true,
+      set: normalizeCampName,
+    },
     campaignType: { type: String, required: true },
     doctorName: { type: String, default: '' },
     doctorCode: { type: String, default: '' },
@@ -40,6 +45,7 @@ const campSchema = new mongoose.Schema(
     emailSubject: { type: String, default: '' },
     emailRawBody: { type: String, default: '' },
     status: { type: String, enum: CAMP_STATUSES, default: 'pending_review' },
+    cancelledBy: { type: String, enum: CANCELLATION_SOURCES, default: null },
     remarks: { type: String, default: '' },
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
     approvedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
@@ -56,5 +62,12 @@ const campSchema = new mongoose.Schema(
 campSchema.index({ status: 1, campDate: -1 });
 campSchema.index({ client: 1, state: 1 });
 campSchema.index({ campaignType: 1 });
+
+campSchema.pre('validate', function normalizeCampaignNameBeforeValidate(next) {
+  if (this.campaignName) {
+    this.campaignName = normalizeCampName(this.campaignName);
+  }
+  next();
+});
 
 export default mongoose.model('Camp', campSchema);

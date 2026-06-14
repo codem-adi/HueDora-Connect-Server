@@ -11,9 +11,10 @@ export const CAMP_STATUSES = [
   'approved',
   'rejected',
   'cancelled',
-  'rescheduled',
   'executed',
 ];
+
+export const CANCELLATION_SOURCES = ['brand', 'khw'];
 
 export const CAMP_SOURCES = [
   'whatsapp',
@@ -34,10 +35,9 @@ export const REACTION_THRESHOLD_WORKING_HOURS = 6;
 
 export const STATUS_TRANSITIONS = {
   pending_review: ['approved', 'rejected'],
-  approved: ['executed', 'cancelled', 'rescheduled'],
+  approved: ['executed', 'cancelled'],
   rejected: ['pending_review'],
   cancelled: [],
-  rescheduled: ['pending_review'],
   executed: [],
 };
 
@@ -50,7 +50,6 @@ export const ROLE_PERMISSIONS = {
     'camps:approve',
     'camps:execute',
     'camps:cancel',
-    'camps:reschedule',
     'dashboard:read',
     'clients:read',
     'clients:create',
@@ -64,18 +63,36 @@ export const ROLE_PERMISSIONS = {
     'client-masters:create',
     'client-masters:update',
     'client-masters:delete',
+    'users:read',
+    'users:create',
+    'users:update',
   ],
   [ROLES.OPERATIONS_EXECUTIVE]: [
     'dashboard:read',
     'clients:read',
     'campaigns:read',
+    'camps:read',
+    'camps:create',
+    'camps:update',
+    'camps:execute',
+    'client-masters:read',
+    'client-masters:create',
+    'client-masters:update',
   ],
   [ROLES.REVIEWER]: [
     'camps:read',
     'camps:review',
+    'camps:edit-pending',
     'dashboard:read',
     'clients:read',
     'campaigns:read',
+    'client-masters:read',
   ],
-  [ROLES.READ_ONLY]: ['camps:read', 'dashboard:read', 'clients:read', 'campaigns:read'],
+  [ROLES.READ_ONLY]: [
+    'camps:read',
+    'dashboard:read',
+    'clients:read',
+    'campaigns:read',
+    'client-masters:read',
+  ],
 };

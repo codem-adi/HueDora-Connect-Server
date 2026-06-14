@@ -1,6 +1,7 @@
 import fs from 'fs';
 import Client from '../models/Client.js';
 import ClientMaster from '../models/ClientMaster.js';
+import { ROLE_PERMISSIONS } from '../config/constants.js';
 import { resolveClient } from '../controllers/clientController.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
 import { logAudit } from '../services/auditService.js';
@@ -82,17 +83,30 @@ async function removeProgramDocument(record) {
   };
 }
 
-async function resolveClientForMaster(body) {
+function userCanCreateClients(user) {
+  const permissions = ROLE_PERMISSIONS[user?.role] || [];
+  return permissions.includes('*') || permissions.includes('clients:create');
+}
+
+async function resolveClientForMaster(body, user) {
+  const allowClientCreate = userCanCreateClients(user);
   const client = await resolveClient({
     clientId: body.clientId,
     clientName: body.clientName,
     clientCode: body.clientCode,
+    allowCreate: allowClientCreate,
   });
+
   if (!client) {
-    const error = new Error('Client name is required');
+    const error = new Error(
+      allowClientCreate
+        ? 'Client name is required'
+        : 'Company does not exist. Select an existing company from the list — new companies can only be created by an administrator.'
+    );
     error.status = 400;
     throw error;
   }
+
   return client;
 }
 
@@ -190,7 +204,7 @@ export const createClientMaster = asyncHandler(async (req, res) => {
     return res.status(400).json({ message: validationErrors[0], errors: validationErrors });
   }
 
-  const client = await resolveClientForMaster(req.body);
+  const client = await resolveClientForMaster(req.body, req.user);
   const payload = buildPayload(req.body, client);
   const record = await ClientMaster.create({
     ...payload,
@@ -227,10 +241,11 @@ export const updateClientMaster = asyncHandler(async (req, res) => {
   let client = await resolveClient({
     clientId: record.client,
     clientName: record.clientName,
+    allowCreate: false,
   });
 
   if (req.body.clientId !== undefined || req.body.clientName !== undefined || req.body.clientCode !== undefined) {
-    client = await resolveClientForMaster(req.body);
+    client = await resolveClientForMaster(req.body, req.user);
     record.client = client._id;
     record.clientName = client.name;
   }
@@ -355,13 +370,37 @@ export const deleteProgramDocument = asyncHandler(async (req, res) => {
 
 export const getProgramDocument = asyncHandler(async (req, res) => {
   const record = await ClientMaster.findOne({ _id: req.params.id, deletedAt: null });
-  if (!record || !hasProgramDocument(record)) {
-    return res.status(404).json({ message: 'Program document not found' });
+  if (!record) {
+    return res.status(404).json({ message: 'Client master record not found' });
+  }
+
+  if (!hasProgramDocument(record)) {
+    return res.status(404).json({ message: 'This program does not have a PDF document.' });
   }
 
   const filePath = resolveStoredFilePath(record.programDocument.storedName);
   if (!fs.existsSync(filePath)) {
-    return res.status(404).json({ message: 'Program document file is missing on server' });
+    const before = record.toObject();
+    await removeProgramDocument(record);
+    record.updatedBy = req.user._id;
+    await record.save();
+    await record.populate('client', 'name code isActive');
+
+    await logAudit({
+      user: req.user,
+      ip: req.ip,
+      entityType: 'client_master',
+      entityId: record._id,
+      action: 'document_missing',
+      beforeValue: before,
+      afterValue: record.toObject(),
+    });
+
+    return res.status(404).json({
+      message: 'Program PDF is missing. The program has been updated to show no document.',
+      documentCleared: true,
+      data: record,
+    });
   }
 
   res.setHeader('Content-Type', record.programDocument.mimeType || 'application/pdf');

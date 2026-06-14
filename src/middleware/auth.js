@@ -40,6 +40,13 @@ export function authorize(...permissions) {
   };
 }
 
+export function requireAdminRole(req, res, next) {
+  if (req.user.role !== 'admin') {
+    return res.status(403).json({ message: 'Admin access required' });
+  }
+  next();
+}
+
 export function requireSuperAdmin(req, res, next) {
   if (req.user.role !== 'super_admin') {
     return res.status(403).json({ message: 'Super admin access required' });

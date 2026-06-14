@@ -49,6 +49,8 @@ export async function ensureServiceUsers() {
       email,
       password: 'service-bot-not-for-login',
       role: ROLES.OPERATIONS_EXECUTIVE,
+      signupStatus: 'approved',
+      isActive: true,
     });
 
     console.log(`[ingest] Created service user ${email}`);

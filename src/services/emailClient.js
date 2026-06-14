@@ -129,14 +129,14 @@ function getSmtpTransport() {
   });
 }
 
-export async function sendEmailReply({ to, subject, text }) {
+export async function sendTransactionalEmail({ to, subject, text, html }) {
   if (!isEmailReplyEnabled()) {
-    console.log('[email] Reply skipped — EMAIL_REPLY_ENABLED=false');
+    console.log('[email] Transactional email skipped — EMAIL_REPLY_ENABLED=false');
     return null;
   }
 
   if (!isEmailReplyConfigured()) {
-    console.log('[email] Reply skipped — SMTP not configured');
+    console.log('[email] Transactional email skipped — SMTP not configured');
     return null;
   }
 
@@ -146,10 +146,15 @@ export async function sendEmailReply({ to, subject, text }) {
     to,
     subject,
     text,
+    html,
   });
 
-  console.log(`[email] Reply sent | to=${to} | subject="${subject}"`);
+  console.log(`[email] Transactional email sent | to=${to} | subject="${subject}"`);
   return info;
+}
+
+export async function sendEmailReply({ to, subject, text }) {
+  return sendTransactionalEmail({ to, subject, text });
 }
 
 export async function parseRawEmail(buffer) {

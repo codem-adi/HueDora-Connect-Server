@@ -1,30 +1,87 @@
 import XLSX from 'xlsx';
+import { CAMP_NAME_OPTIONS } from '../config/campNames.js';
 import { CAMP_IMPORT_FIELDS } from './importMapper.js';
 
-const SAMPLE_ROW = {
-  'Client Name': 'Sun Pharma',
-  'Campaign Name': 'Classic',
-  'Campaign Type': 'BMD',
-  'Doctor Name': 'Dr. Sample',
-  'Doctor Code': 'DOC101',
-  'SC Code': 'SC001',
-  'MSL No': 'MSL001',
-  'Speciality': 'Cardiology',
-  'Clinic / Hospital': 'City General Hospital',
-  'Camp Address': '123 Main Road',
-  'City': 'Mumbai',
-  'State': 'Maharashtra',
-  'Pincode': '400001',
-  'Camp Date': '20/06/2026',
-  'Start Time': '09:00',
-  'Duration (Hours)': 3,
-  'End Time': '12:00',
-  'Expected Patients': 50,
-  'Actual Patients': 0,
-  'Field Person': 'Field Rep 1',
-  'Technician': 'Tech 1',
-  'Remarks': 'Sample row — replace with your camp details',
-};
+const SAMPLE_CLIENTS = [
+  'Sun Pharma',
+  'Intas',
+  'Dr Reddy',
+  'Zydus Pharma',
+  'Cipla',
+];
+
+const SAMPLE_DIVISIONS = [
+  'Classic BMD Camps',
+  'Viva BMD Camps',
+  'BMD Camps',
+  'Ortreso',
+  'Cachet India BMD Camps',
+];
+
+const SAMPLE_CITIES = [
+  { city: 'Mumbai', state: 'Maharashtra', pincode: '400001' },
+  { city: 'Ahmedabad', state: 'Gujarat', pincode: '380001' },
+  { city: 'Bengaluru', state: 'Karnataka', pincode: '560001' },
+  { city: 'New Delhi', state: 'Delhi', pincode: '110001' },
+  { city: 'Chennai', state: 'Tamil Nadu', pincode: '600001' },
+];
+
+const DURATION_OPTIONS = [3, 4, 5, 6, 8];
+
+export const SAMPLE_ROW_COUNT = 15;
+
+function formatCampDate(dayOffset) {
+  const date = new Date();
+  date.setDate(date.getDate() + dayOffset);
+  const day = String(date.getDate()).padStart(2, '0');
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const year = date.getFullYear();
+  return `${day}/${month}/${year}`;
+}
+
+function computeEndTime(startTime, durationHours) {
+  const [hours, minutes] = String(startTime).split(':').map(Number);
+  const totalMinutes = hours * 60 + (minutes || 0) + durationHours * 60;
+  const endHours = Math.floor(totalMinutes / 60) % 24;
+  const endMinutes = totalMinutes % 60;
+  return `${String(endHours).padStart(2, '0')}:${String(endMinutes).padStart(2, '0')}`;
+}
+
+function buildSampleRow(index) {
+  const location = SAMPLE_CITIES[index % SAMPLE_CITIES.length];
+  const durationHours = DURATION_OPTIONS[index % DURATION_OPTIONS.length];
+  const startTime = index % 2 === 0 ? '09:00' : '10:30';
+
+  return {
+    'Client Name': SAMPLE_CLIENTS[index % SAMPLE_CLIENTS.length],
+    'Camp Name': CAMP_NAME_OPTIONS[index % CAMP_NAME_OPTIONS.length],
+    'Division / BU': SAMPLE_DIVISIONS[index % SAMPLE_DIVISIONS.length],
+    'Doctor Name': `Dr. Sample ${index + 1}`,
+    'Doctor Code': `DOC${101 + index}`,
+    'SC Code': `SC${String(index + 1).padStart(3, '0')}`,
+    'MSL No': `MSL${String(index + 1).padStart(3, '0')}`,
+    'Speciality': ['Cardiology', 'Orthopaedics', 'Diabetology', 'Nephrology', 'General Medicine'][index % 5],
+    'Clinic / Hospital': `${location.city} General Hospital`,
+    'Camp Address': `${10 + index} Main Road, ${location.city}`,
+    'City': location.city,
+    'State': location.state,
+    'Pincode': location.pincode,
+    'Camp Date': formatCampDate(index + 3),
+    'Start Time': startTime,
+    'Duration (Hours)': durationHours,
+    'End Time': computeEndTime(startTime, durationHours),
+    'Expected Patients': 40 + (index * 3),
+    'Actual Patients': 0,
+    'Field Person': `Field Rep ${index + 1}`,
+    'Field Phone': `98765${String(43210 + index).slice(-5)}`,
+    'Technician': `Tech ${index + 1}`,
+    'Remarks': `Sample camp row ${index + 1} — replace with your camp details`,
+  };
+}
+
+export function getSampleRows(count = SAMPLE_ROW_COUNT) {
+  return Array.from({ length: count }, (_, index) => buildSampleRow(index));
+}
 
 export function getStandardMapping() {
   return Object.fromEntries(CAMP_IMPORT_FIELDS.map((field) => [field.key, field.label]));
@@ -38,9 +95,10 @@ export function getMissingStandardHeaders(headers = []) {
     .map((field) => field.label);
 }
 
-export function buildSampleWorkbookBuffer() {
+export function buildSampleWorkbookBuffer(rowCount = SAMPLE_ROW_COUNT) {
   const headers = CAMP_IMPORT_FIELDS.map((field) => field.label);
-  const worksheet = XLSX.utils.json_to_sheet([SAMPLE_ROW], { header: headers });
+  const rows = getSampleRows(rowCount);
+  const worksheet = XLSX.utils.json_to_sheet(rows, { header: headers });
   const workbook = XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(workbook, worksheet, 'Camp Import');
   return XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
