@@ -34,7 +34,7 @@ export async function resolveCreatedByUser(senderPhone) {
     if (mappedUser) return mappedUser;
   }
 
-  const serviceEmail = process.env.WHATSAPP_SERVICE_USER_EMAIL || 'whatsapp-bot@kdashboard.com';
+  const serviceEmail = process.env.WHATSAPP_SERVICE_USER_EMAIL || 'whatsapp-bot@huedoraconnect.com';
   const serviceUser = await User.findOne({ email: serviceEmail, deletedAt: null });
   if (!serviceUser) {
     throw new Error(`WhatsApp service user not found (${serviceEmail}). Run seed or set WHATSAPP_SERVICE_USER_EMAIL.`);

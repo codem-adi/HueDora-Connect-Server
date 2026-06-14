@@ -9,12 +9,12 @@ export const PENDING_EMAIL_CLIENT_NAME = PENDING_IMPORT_CLIENT_NAME;
 const SERVICE_BOTS = [
   {
     envKey: 'WHATSAPP_SERVICE_USER_EMAIL',
-    defaultEmail: 'whatsapp-bot@kdashboard.com',
+    defaultEmail: 'whatsapp-bot@huedoraconnect.com',
     name: 'WhatsApp Bot',
   },
   {
     envKey: 'EMAIL_SERVICE_USER_EMAIL',
-    defaultEmail: 'email-bot@kdashboard.com',
+    defaultEmail: 'email-bot@huedoraconnect.com',
     name: 'Email Bot',
   },
 ];

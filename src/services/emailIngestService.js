@@ -44,7 +44,7 @@ export async function resolveCreatedByEmail(senderEmail) {
     if (mappedUser) return mappedUser;
   }
 
-  const serviceEmail = (process.env.EMAIL_SERVICE_USER_EMAIL || 'email-bot@kdashboard.com').toLowerCase();
+  const serviceEmail = (process.env.EMAIL_SERVICE_USER_EMAIL || 'email-bot@huedoraconnect.com').toLowerCase();
   let serviceUser = await User.findOne({ email: serviceEmail, deletedAt: null });
   if (!serviceUser) {
     await ensureServiceUsers();

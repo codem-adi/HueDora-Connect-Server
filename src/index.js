@@ -17,6 +17,7 @@ import { errorHandler, notFound } from './middleware/errorHandler.js';
 import { trimRequest } from './middleware/trimRequest.js';
 import { startEmailPoller } from './services/emailPoller.js';
 import { ensureServiceUsers } from './services/ensureServiceUsers.js';
+import { ensureDefaultUsers } from './services/ensureDefaultUsers.js';
 import { ensureCampIndexes } from './services/ensureCampIndexes.js';
 import { ensureProgramDocumentsDir } from './utils/programDocumentStorage.js';
 
@@ -61,6 +62,7 @@ async function start() {
   await ensureCampIndexes();
   await ensureProgramDocumentsDir();
   await ensureServiceUsers();
+  await ensureDefaultUsers();
   await startEmailPoller();
   app.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);

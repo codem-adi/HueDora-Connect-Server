@@ -52,13 +52,13 @@ async function seed() {
   ]);
 
   const userSeeds = [
-    { name: 'Super Admin', email: 'superadmin@kdashboard.com', password: 'admin123', role: ROLES.SUPER_ADMIN },
-    { name: 'Camp Admin', email: 'admin@kdashboard.com', password: 'admin123', role: ROLES.ADMIN },
-    { name: 'Ops Executive', email: 'ops@kdashboard.com', password: 'admin123', role: ROLES.OPERATIONS_EXECUTIVE },
-    { name: 'Camp Reviewer', email: 'reviewer@kdashboard.com', password: 'admin123', role: ROLES.REVIEWER },
-    { name: 'Read Only User', email: 'viewer@kdashboard.com', password: 'admin123', role: ROLES.READ_ONLY },
-    { name: 'WhatsApp Bot', email: 'whatsapp-bot@kdashboard.com', password: 'admin123', role: ROLES.OPERATIONS_EXECUTIVE },
-    { name: 'Email Bot', email: 'email-bot@kdashboard.com', password: 'admin123', role: ROLES.OPERATIONS_EXECUTIVE },
+    { name: 'Super Admin', email: 'superadmin@huedoraconnect.com', password: 'admin123', role: ROLES.SUPER_ADMIN },
+    { name: 'Camp Admin', email: 'admin@huedoraconnect.com', password: 'admin123', role: ROLES.ADMIN },
+    { name: 'Ops Executive', email: 'ops@huedoraconnect.com', password: 'admin123', role: ROLES.OPERATIONS_EXECUTIVE },
+    { name: 'Camp Reviewer', email: 'reviewer@huedoraconnect.com', password: 'admin123', role: ROLES.REVIEWER },
+    { name: 'Read Only User', email: 'viewer@huedoraconnect.com', password: 'admin123', role: ROLES.READ_ONLY },
+    { name: 'WhatsApp Bot', email: 'whatsapp-bot@huedoraconnect.com', password: 'admin123', role: ROLES.OPERATIONS_EXECUTIVE },
+    { name: 'Email Bot', email: 'email-bot@huedoraconnect.com', password: 'admin123', role: ROLES.OPERATIONS_EXECUTIVE },
   ];
   const users = await Promise.all(userSeeds.map((seedUser) => User.create(seedUser)));
 
@@ -205,7 +205,7 @@ const divisions = ['Classic', 'Premium', 'Active'];
   await Camp.insertMany(camps);
 
   console.log('Seed complete');
-  console.log('Login: admin@kdashboard.com / admin123');
+  console.log('Login: admin@huedoraconnect.com / admin123');
   await mongoose.disconnect();
 }
 
