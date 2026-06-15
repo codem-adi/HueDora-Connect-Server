@@ -34,7 +34,6 @@ const campSchema = new mongoose.Schema(
     actualPatients: { type: Number, default: 0 },
     fieldPersonName: { type: String, default: '' },
     fieldPersonPhone: { type: String, default: '' },
-    technicianName: { type: String, default: '' },
     source: { type: String, enum: CAMP_SOURCES, default: 'dashboard' },
     whatsappMessageId: { type: String, unique: true, sparse: true },
     whatsappSenderPhone: { type: String, default: '' },

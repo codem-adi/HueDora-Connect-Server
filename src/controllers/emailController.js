@@ -1,6 +1,7 @@
 import { asyncHandler } from '../middleware/errorHandler.js';
 import { parseRawEmail } from '../services/emailClient.js';
-import { pollImapInbox, processIncomingEmail } from '../services/emailIngestService.js';
+import { pollImapInbox } from '../services/emailIngestService.js';
+import { ingestWebhookEmailToInbox } from '../services/inboundEmailService.js';
 import { EMAIL_FORMAT_EXAMPLE } from '../utils/emailParser.js';
 
 function verifyEmailWebhookSecret(req) {
@@ -54,13 +55,13 @@ export const receiveEmailWebhook = asyncHandler(async (req, res) => {
     return res.status(400).json({ message: 'Unable to parse inbound email payload' });
   }
 
-  res.status(202).json({ message: 'Email accepted for processing' });
+  res.status(202).json({ message: 'Email accepted for inbox sync' });
 
   try {
-    const result = await processIncomingEmail(emailPayload, 'webhook');
-    console.log('[email] Webhook processed:', result.messageId, result.status);
+    const stored = await ingestWebhookEmailToInbox(emailPayload);
+    console.log('[email] Webhook stored in communications inbox:', stored.messageId, stored.isCampaignCandidate);
   } catch (error) {
-    console.error('[email] Webhook processing failed:', error);
+    console.error('[email] Webhook inbox sync failed:', error);
   }
 });
 

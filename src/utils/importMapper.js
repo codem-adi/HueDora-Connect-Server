@@ -1,55 +1,50 @@
 import { normalizeCampName } from '../config/campNames.js';
-import { parseLocalDateInput, resolveClinicHospitalName } from './campHelpers.js';
+import { parseLocalDateInput, computeDurationHours, resolveCampSchedule, resolveClinicHospitalName } from './campHelpers.js';
 
 export const CAMP_IMPORT_FIELDS = [
   { key: 'clientName', label: 'Client Name', required: true },
+  { key: 'campaignType', label: 'Division / Business', required: false },
   { key: 'campaignName', label: 'Camp Name', required: false },
-  { key: 'campaignType', label: 'Division / BU', required: false },
   { key: 'doctorName', label: 'Doctor Name', required: false },
   { key: 'doctorCode', label: 'Doctor Code', required: false },
-  { key: 'scCode', label: 'SC Code', required: false },
-  { key: 'mslNo', label: 'MSL No', required: false },
-  { key: 'speciality', label: 'Speciality', required: false },
-  { key: 'hospitalName', label: 'Clinic / Hospital', required: false },
   { key: 'campAddress', label: 'Camp Address', required: false },
   { key: 'city', label: 'City', required: false },
   { key: 'state', label: 'State', required: false },
   { key: 'pincode', label: 'Pincode', required: false },
   { key: 'campDate', label: 'Camp Date', required: true },
   { key: 'startTime', label: 'Start Time', required: false },
-  { key: 'durationHours', label: 'Duration (Hours)', required: false },
   { key: 'endTime', label: 'End Time', required: false },
   { key: 'expectedPatients', label: 'Expected Patients', required: false },
-  { key: 'actualPatients', label: 'Actual Patients', required: false },
-  { key: 'fieldPersonName', label: 'Field Person', required: false },
-  { key: 'fieldPersonPhone', label: 'Field Phone', required: false },
-  { key: 'technicianName', label: 'Technician', required: false },
+  { key: 'fieldPersonName', label: 'Field Person Name', required: false },
+  { key: 'fieldPersonPhone', label: 'Field Person Contact', required: false },
   { key: 'remarks', label: 'Remarks', required: false },
 ];
 
 const HEADER_ALIASES = {
   clientName: ['client name', 'client', 'company', 'pharma', 'pharma client'],
-  campaignName: ['camp name', 'campaign name', 'campaign', 'program name'],
-  campaignType: ['division / bu', 'division', 'business unit', 'campaign type', 'program', 'programme'],
+  campaignName: ['camp name', 'campaign name', 'campaign'],
+  campaignType: [
+    'division / business',
+    'division / bu',
+    'division',
+    'business unit',
+    'campaign type',
+    'program name',
+    'program',
+    'programme',
+  ],
   doctorName: ['doctor name', 'dr name', 'doctor', 'physician', 'hcp name'],
   doctorCode: ['doctor code', 'dr code', 'hcp code'],
-  scCode: ['sc code', 'sales code'],
-  mslNo: ['msl no', 'msl number', 'msl'],
-  speciality: ['speciality', 'specialty', 'specialization'],
-  hospitalName: ['hospital name', 'hospital', 'institution', 'clinic name', 'clinic', 'clinic/hospital', 'hospital/clinic'],
   campAddress: ['camp address', 'address', 'venue address', 'location'],
   city: ['city', 'town'],
   state: ['state', 'province', 'region'],
   pincode: ['pincode', 'pin code', 'zip', 'postal code'],
   campDate: ['camp date', 'date', 'event date', 'schedule date'],
   startTime: ['start time', 'from time', 'time from'],
-  durationHours: ['duration', 'duration hours', 'camp duration', 'hours', 'time frame'],
   endTime: ['end time', 'to time', 'time to'],
   expectedPatients: ['expected patients', 'expected patient', 'patient count', 'footfall'],
-  actualPatients: ['actual patients', 'actual patient', 'patients screened'],
-  fieldPersonName: ['field person', 'field rep', 'mr name', 'representative'],
-  fieldPersonPhone: ['field phone', 'field person phone', 'field person contact', 'mobile no', 'mr mobile'],
-  technicianName: ['technician', 'technician name', 'tech name'],
+  fieldPersonName: ['field person name', 'field person', 'field rep', 'mr name', 'representative'],
+  fieldPersonPhone: ['field person contact', 'field phone', 'field person phone', 'mobile no', 'mr mobile'],
   remarks: ['remarks', 'notes', 'comments'],
 };
 
@@ -134,12 +129,14 @@ export function validateMappedRows(rows) {
       errors.push('Expected patients must be a number');
     }
 
-    const actualPatients = row.actualPatients === '' || row.actualPatients == null
-      ? null
-      : Number(row.actualPatients);
-    if (actualPatients != null && Number.isNaN(actualPatients)) {
-      errors.push('Actual patients must be a number');
+    const startTime = String(row.startTime || '').trim() || '09:00';
+    const endTime = String(row.endTime || '').trim();
+
+    if (endTime && computeDurationHours(startTime, endTime) == null) {
+      errors.push('End time is invalid');
     }
+
+    const schedule = resolveCampSchedule({ startTime, endTime });
 
     const normalized = {
       ...row,
@@ -148,9 +145,6 @@ export function validateMappedRows(rows) {
       campaignType: String(row.campaignType || 'Screening').trim(),
       doctorName: String(row.doctorName || '').trim(),
       doctorCode: String(row.doctorCode || '').trim(),
-      scCode: String(row.scCode || '').trim(),
-      mslNo: String(row.mslNo || '').trim(),
-      speciality: String(row.speciality || '').trim(),
       hospitalName: resolveClinicHospitalName(row.hospitalName, row.clinicName),
       clinicName: '',
       campAddress: String(row.campAddress || '').trim(),
@@ -158,14 +152,12 @@ export function validateMappedRows(rows) {
       state: String(row.state || '').trim(),
       pincode: String(row.pincode || '').trim(),
       campDate,
-      startTime: String(row.startTime || '').trim(),
-      endTime: String(row.endTime || '').trim(),
-      durationHours: Number(row.durationHours) || 3,
+      startTime: schedule.startTime,
+      endTime: schedule.endTime,
+      durationHours: schedule.durationHours,
       expectedPatients: expectedPatients ?? 0,
-      actualPatients: actualPatients ?? 0,
       fieldPersonName: String(row.fieldPersonName || '').trim(),
       fieldPersonPhone: String(row.fieldPersonPhone || '').trim(),
-      technicianName: String(row.technicianName || '').trim(),
       remarks: String(row.remarks || '').trim(),
     };
 

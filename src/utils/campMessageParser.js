@@ -375,7 +375,6 @@ export function normalizeCampRow(raw = {}, { from = '', knownClients = [] } = {}
     actualPatients: Number(fields.actualPatients) || 0,
     fieldPersonName: String(fields.fieldPersonName || '').trim(),
     fieldPersonPhone: String(fields.fieldPersonPhone || fields.fieldPersonContact || '').trim(),
-    technicianName: String(fields.technicianName || '').trim(),
     remarks: String(fields.remarks || '').trim(),
   };
 }

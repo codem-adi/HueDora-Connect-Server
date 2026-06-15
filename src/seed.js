@@ -167,7 +167,6 @@ async function seed() {
       expectedPatients: 50 + (i * 3),
       actualPatients: status === 'executed' ? 45 + (i * 2) : 0,
       fieldPersonName: `Field Rep ${i + 1}`,
-      technicianName: `Tech ${i + 1}`,
       source: ['email', 'whatsapp', 'excel'][i % 3],
       status,
       createdBy: users[1]._id,

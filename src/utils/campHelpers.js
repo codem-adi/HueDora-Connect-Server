@@ -29,6 +29,45 @@ export function computeEndTime(startTime, durationHours) {
   return formatMinutes(startMinutes + durationHours * 60);
 }
 
+export function computeDurationHours(startTime, endTime) {
+  const startMinutes = parseTimeToMinutes(startTime);
+  const endMinutes = parseTimeToMinutes(endTime);
+  if (startMinutes == null || endMinutes == null) return null;
+
+  let diff = endMinutes - startMinutes;
+  if (diff <= 0) diff += 24 * 60;
+
+  const hours = diff / 60;
+  if (hours <= 0) return null;
+
+  return Math.max(1, Math.min(12, Math.round(hours * 100) / 100));
+}
+
+export function resolveCampSchedule({
+  startTime = '09:00',
+  endTime = '',
+  durationHours = null,
+} = {}) {
+  const start = String(startTime || '09:00').trim() || '09:00';
+  const end = String(endTime || '').trim();
+
+  if (end) {
+    const computedDuration = computeDurationHours(start, end);
+    return {
+      startTime: start,
+      endTime: end,
+      durationHours: computedDuration ?? (Number(durationHours) || 3),
+    };
+  }
+
+  const duration = Number(durationHours) || 3;
+  return {
+    startTime: start,
+    endTime: computeEndTime(start, duration),
+    durationHours: duration,
+  };
+}
+
 export function getCampEndDateTime(camp) {
   const end = new Date(camp.campDate);
   const endTime = camp.endTime || computeEndTime(camp.startTime, camp.durationHours);

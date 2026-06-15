@@ -10,14 +10,15 @@ import { buildPaginationMeta, parsePaginationQuery } from '../utils/pagination.j
 import {
   buildCampFilter,
   canTransition,
-  computeEndTime,
   generateCampId,
   isCampEditable,
   isCampOverdue,
   parseLocalDateInput,
+  resolveCampSchedule,
   resolveClinicHospitalName,
   withCampSchedule,
 } from '../utils/campHelpers.js';
+import { findExistingDuplicateCamp } from '../utils/campDuplicateHelpers.js';
 import { captureSubmissionTracking, getReactionAlert, matchesAlertFilter } from '../utils/reactionHelpers.js';
 import {
   enrichCampsWithApprovalStatus,
@@ -25,15 +26,11 @@ import {
 } from '../utils/campApprovalValidation.js';
 
 function applyScheduleFields(body) {
-  const durationHours = Number(body.durationHours) || 3;
-  const startTime = body.startTime || '09:00';
-  const endTime = body.endTime || computeEndTime(startTime, durationHours);
-
-  return {
-    durationHours,
-    startTime,
-    endTime,
-  };
+  return resolveCampSchedule({
+    startTime: body.startTime || '09:00',
+    endTime: body.endTime,
+    durationHours: body.durationHours,
+  });
 }
 
 export const listCamps = asyncHandler(async (req, res) => {
@@ -132,6 +129,24 @@ export const createCamp = asyncHandler(async (req, res) => {
 
   const schedule = applyScheduleFields(req.body);
   await assertClientHasDivision(client._id, req.body.campaignType);
+
+  const duplicate = await findExistingDuplicateCamp({
+    client,
+    row: {
+      ...req.body,
+      campaignType: req.body.campaignType,
+      doctorName: req.body.doctorName,
+      doctorCode: req.body.doctorCode,
+      campDate: req.body.campDate,
+    },
+  });
+  if (duplicate) {
+    return res.status(409).json({
+      message: `Duplicate camp already exists (${duplicate.campId}) for the same client, division, date, and doctor`,
+      duplicateCampId: duplicate.campId,
+    });
+  }
+
   const campId = await generateCampId(req.body.campDate);
   const tracking = captureSubmissionTracking();
   const clinicHospital = resolveClinicHospitalName(req.body.hospitalName, req.body.clinicName);
@@ -159,7 +174,6 @@ export const createCamp = asyncHandler(async (req, res) => {
     actualPatients: req.body.actualPatients,
     fieldPersonName: req.body.fieldPersonName,
     fieldPersonPhone: req.body.fieldPersonPhone,
-    technicianName: req.body.technicianName,
     source: req.body.source || 'excel',
     status: 'pending_review',
     remarks: req.body.remarks,
@@ -238,7 +252,7 @@ export const updateCamp = asyncHandler(async (req, res) => {
     'campaignName', 'campaignType', 'doctorName', 'doctorCode', 'scCode', 'mslNo',
     'speciality', 'campAddress', 'city', 'state',
     'pincode', 'startTime', 'endTime', 'durationHours', 'expectedPatients',
-    'actualPatients', 'fieldPersonName', 'fieldPersonPhone', 'technicianName', 'remarks',
+    'actualPatients', 'fieldPersonName', 'fieldPersonPhone', 'remarks',
   ];
 
   editableFields.forEach((field) => {
@@ -257,8 +271,15 @@ export const updateCamp = asyncHandler(async (req, res) => {
     camp.clinicName = '';
   }
 
-  if (req.body.durationHours !== undefined || req.body.startTime !== undefined) {
-    camp.endTime = req.body.endTime || computeEndTime(camp.startTime, camp.durationHours);
+  if (req.body.durationHours !== undefined || req.body.startTime !== undefined || req.body.endTime !== undefined) {
+    const schedule = resolveCampSchedule({
+      startTime: req.body.startTime ?? camp.startTime,
+      endTime: req.body.endTime ?? camp.endTime,
+      durationHours: req.body.durationHours ?? camp.durationHours,
+    });
+    camp.startTime = schedule.startTime;
+    camp.endTime = schedule.endTime;
+    camp.durationHours = schedule.durationHours;
   }
 
   await camp.save();

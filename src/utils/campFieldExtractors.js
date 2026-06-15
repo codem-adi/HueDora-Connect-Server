@@ -54,9 +54,8 @@ export const FIELD_LABEL_ALIASES = {
   fieldPersonPhone: [
     'field phone', 'field person phone', 'field person contact', 'field person contact no',
     'se mobile', 'se mobile no', 'bo contact no', 'mob number', 'mobile no', 'mr mobile',
-    'se/kam contact no', 'flm mob no', 'rsm mobile',
+    'se/kam contact no', 'flm mob no', 'rsm mobile', 'technician contact',
   ],
-  technicianName: ['technician name', 'tech name', 'technician', 'tech'],
   remarks: ['remarks', 'notes', 'comment', 'comments', 'additional info', 'timing'],
 };
 

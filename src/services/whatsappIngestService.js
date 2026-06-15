@@ -3,6 +3,7 @@ import Client from '../models/Client.js';
 import User from '../models/User.js';
 import { logAudit } from './auditService.js';
 import { createCampFromRow } from './campCreationService.js';
+import { CampDuplicateError } from '../utils/campDuplicateHelpers.js';
 import { sendWhatsAppText } from './whatsappClient.js';
 import { ensurePendingEmailClient } from './ensureServiceUsers.js';
 import {
@@ -94,18 +95,33 @@ async function createCampFromWhatsAppRow({
 
   const client = await resolveClientForImport(row, message.text);
 
-  const camp = await createCampFromRow({
-    row: appendIngestReviewRemarks(row, client),
-    client,
-    createdBy,
-    source: 'whatsapp',
-    submittedAt,
-    extras: {
-      whatsappMessageId: ingestId,
-      whatsappSenderPhone: normalizeWhatsAppPhone(message.from),
-      whatsappRawMessage: message.text,
-    },
-  });
+  let camp;
+  try {
+    camp = await createCampFromRow({
+      row: appendIngestReviewRemarks(row, client),
+      client,
+      createdBy,
+      source: 'whatsapp',
+      submittedAt,
+      extras: {
+        whatsappMessageId: ingestId,
+        whatsappSenderPhone: normalizeWhatsAppPhone(message.from),
+        whatsappRawMessage: message.text,
+      },
+    });
+  } catch (error) {
+    if (error instanceof CampDuplicateError) {
+      return {
+        status: 'duplicate',
+        id: error.existingCamp._id,
+        campId: error.existingCamp.campId,
+        ingestId,
+        rowNumber,
+        reason: error.message,
+      };
+    }
+    throw error;
+  }
 
   await logAudit({
     user: createdBy,
@@ -126,6 +142,7 @@ async function createCampFromWhatsAppRow({
 
   return {
     status: 'created',
+    id: camp._id,
     campId: camp.campId,
     ingestId,
     rowNumber,

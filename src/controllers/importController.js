@@ -5,6 +5,7 @@ import { CAMP_IMPORT_FIELDS } from '../utils/importMapper.js';
 import { parseExcelBuffer } from '../utils/excelParser.js';
 import { suggestMappings, mapRows, validateMappedRows } from '../utils/importMapper.js';
 import { createCampFromRow } from '../services/campCreationService.js';
+import { CampDuplicateError } from '../utils/campDuplicateHelpers.js';
 import { buildSampleWorkbookBuffer, getMissingStandardHeaders, getStandardMapping } from '../utils/sampleExcel.js';
 import { logAudit } from '../services/auditService.js';
 import { asyncHandler } from '../middleware/errorHandler.js';
@@ -101,14 +102,25 @@ export const confirmImport = asyncHandler(async (req, res) => {
       continue;
     }
 
-    const camp = await createCampFromRow({
-      row,
-      client,
-      createdBy: req.user,
-      source: 'excel',
-    });
+    try {
+      const camp = await createCampFromRow({
+        row,
+        client,
+        createdBy: req.user,
+        source: 'excel',
+      });
 
-    created.push(camp);
+      created.push(camp);
+    } catch (error) {
+      if (error instanceof CampDuplicateError) {
+        skipped.push({
+          rowNumber: row.rowNumber,
+          reason: error.message,
+        });
+        continue;
+      }
+      throw error;
+    }
   }
 
   if (templateName?.trim() && req.user.role === ROLES.SUPER_ADMIN) {

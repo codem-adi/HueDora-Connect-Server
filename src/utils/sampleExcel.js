@@ -26,7 +26,7 @@ const SAMPLE_CITIES = [
   { city: 'Chennai', state: 'Tamil Nadu', pincode: '600001' },
 ];
 
-const DURATION_OPTIONS = [3, 4, 5, 6, 8];
+const SAMPLE_DURATIONS = [3, 4, 5, 6, 8];
 
 export const SAMPLE_ROW_COUNT = 15;
 
@@ -49,32 +49,26 @@ function computeEndTime(startTime, durationHours) {
 
 function buildSampleRow(index) {
   const location = SAMPLE_CITIES[index % SAMPLE_CITIES.length];
-  const durationHours = DURATION_OPTIONS[index % DURATION_OPTIONS.length];
+  const durationHours = SAMPLE_DURATIONS[index % SAMPLE_DURATIONS.length];
   const startTime = index % 2 === 0 ? '09:00' : '10:30';
+  const endTime = computeEndTime(startTime, durationHours);
 
   return {
     'Client Name': SAMPLE_CLIENTS[index % SAMPLE_CLIENTS.length],
+    'Division / Business': SAMPLE_DIVISIONS[index % SAMPLE_DIVISIONS.length],
     'Camp Name': CAMP_NAME_OPTIONS[index % CAMP_NAME_OPTIONS.length],
-    'Division / BU': SAMPLE_DIVISIONS[index % SAMPLE_DIVISIONS.length],
     'Doctor Name': `Dr. Sample ${index + 1}`,
     'Doctor Code': `DOC${101 + index}`,
-    'SC Code': `SC${String(index + 1).padStart(3, '0')}`,
-    'MSL No': `MSL${String(index + 1).padStart(3, '0')}`,
-    'Speciality': ['Cardiology', 'Orthopaedics', 'Diabetology', 'Nephrology', 'General Medicine'][index % 5],
-    'Clinic / Hospital': `${location.city} General Hospital`,
     'Camp Address': `${10 + index} Main Road, ${location.city}`,
     'City': location.city,
     'State': location.state,
     'Pincode': location.pincode,
     'Camp Date': formatCampDate(index + 3),
     'Start Time': startTime,
-    'Duration (Hours)': durationHours,
-    'End Time': computeEndTime(startTime, durationHours),
+    'End Time': endTime,
     'Expected Patients': 40 + (index * 3),
-    'Actual Patients': 0,
-    'Field Person': `Field Rep ${index + 1}`,
-    'Field Phone': `98765${String(43210 + index).slice(-5)}`,
-    'Technician': `Tech ${index + 1}`,
+    'Field Person Name': `Field Rep ${index + 1}`,
+    'Field Person Contact': `98765${String(43210 + index).slice(-5)}`,
     'Remarks': `Sample camp row ${index + 1} — replace with your camp details`,
   };
 }

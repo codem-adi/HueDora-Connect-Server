@@ -1,6 +1,7 @@
 import { normalizeCampName } from '../config/campNames.js';
 import Camp from '../models/Camp.js';
-import { computeEndTime, generateCampId } from '../utils/campHelpers.js';
+import { CampDuplicateError, findExistingDuplicateCamp } from '../utils/campDuplicateHelpers.js';
+import { generateCampId, resolveCampSchedule } from '../utils/campHelpers.js';
 import { captureSubmissionTracking } from '../utils/reactionHelpers.js';
 
 export async function createCampFromRow({
@@ -11,10 +12,17 @@ export async function createCampFromRow({
   submittedAt,
   extras = {},
 }) {
+  const duplicate = await findExistingDuplicateCamp({ client, row });
+  if (duplicate) {
+    throw new CampDuplicateError(duplicate);
+  }
+
   const campId = await generateCampId(row.campDate);
-  const durationHours = Number(row.durationHours) || 3;
-  const startTime = row.startTime || '09:00';
-  const endTime = row.endTime || computeEndTime(startTime, durationHours);
+  const schedule = resolveCampSchedule({
+    startTime: row.startTime || '09:00',
+    endTime: row.endTime,
+    durationHours: row.durationHours,
+  });
   const tracking = captureSubmissionTracking(submittedAt || new Date());
 
   const payload = {
@@ -35,14 +43,13 @@ export async function createCampFromRow({
     state: row.state,
     pincode: row.pincode,
     campDate: row.campDate,
-    startTime,
-    endTime,
-    durationHours,
+    startTime: schedule.startTime,
+    endTime: schedule.endTime,
+    durationHours: schedule.durationHours,
     expectedPatients: row.expectedPatients,
     actualPatients: row.actualPatients,
     fieldPersonName: row.fieldPersonName,
     fieldPersonPhone: row.fieldPersonPhone,
-    technicianName: row.technicianName,
     remarks: row.remarks,
     source,
     status: 'pending_review',

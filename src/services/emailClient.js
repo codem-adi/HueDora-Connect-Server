@@ -180,48 +180,71 @@ export function normalizeParsedEmail(parsed) {
   };
 }
 
+let imapOperationChain = Promise.resolve();
+
+function runExclusiveImapOperation(operationName, fn) {
+  const run = imapOperationChain.then(async () => {
+    try {
+      return await fn();
+    } catch (error) {
+      const wrapped = new Error(formatImapError(error));
+      wrapped.cause = error;
+      console.error(`[email] ${operationName} failed:`, wrapped.message);
+      throw wrapped;
+    }
+  });
+
+  imapOperationChain = run.catch(() => {});
+  return run;
+}
+
 export async function fetchEmailsForIngest() {
   if (!isImapConfigured()) {
     throw new Error('IMAP is not configured');
   }
 
-  const client = createImapClient();
+  return runExclusiveImapOperation('IMAP fetch', async () => {
+    const client = createImapClient();
+    const mailbox = process.env.EMAIL_IMAP_MAILBOX || 'INBOX';
+    const emails = [];
 
-  const mailbox = process.env.EMAIL_IMAP_MAILBOX || 'INBOX';
-  const emails = [];
+    await client.connect();
+    const lock = await client.getMailboxLock(mailbox);
 
-  await client.connect();
-  const lock = await client.getMailboxLock(mailbox);
+    try {
+      const fetchQuery = buildImapFetchQuery();
+      const messages = await client.fetch(
+        fetchQuery,
+        { uid: true, source: true, envelope: true, internalDate: true }
+      );
 
-  try {
-    const fetchQuery = buildImapFetchQuery();
-    const messages = await client.fetch(
-      fetchQuery,
-      { uid: true, source: true, envelope: true, internalDate: true }
-    );
-
-    for await (const message of messages) {
-      const parsed = await simpleParser(message.source);
-      const normalized = normalizeParsedEmail(parsed);
-      emails.push({
-        uid: message.uid,
-        internalDate: message.internalDate,
-        receivedAt: normalized.receivedAt || message.internalDate || new Date(),
-        ...normalized,
-      });
+      for await (const message of messages) {
+        try {
+          const parsed = await simpleParser(message.source);
+          const normalized = normalizeParsedEmail(parsed);
+          emails.push({
+            uid: message.uid,
+            internalDate: message.internalDate,
+            receivedAt: normalized.receivedAt || message.internalDate || new Date(),
+            ...normalized,
+          });
+        } catch (error) {
+          console.error(`[email] Failed to parse IMAP message uid=${message.uid}:`, error.message);
+        }
+      }
+    } finally {
+      lock.release();
+      await client.logout();
     }
-  } finally {
-    lock.release();
-    await client.logout();
-  }
 
-  emails.sort((a, b) => new Date(a.receivedAt) - new Date(b.receivedAt));
+    emails.sort((a, b) => new Date(a.receivedAt) - new Date(b.receivedAt));
 
-  if (emails.length) {
-    console.log(`[email] IMAP fetched ${emails.length} message(s) since cursor (read + unread)`);
-  }
+    if (emails.length) {
+      console.log(`[email] IMAP fetched ${emails.length} message(s) since cursor (read + unread)`);
+    }
 
-  return emails;
+    return emails;
+  });
 }
 
 /** @deprecated use fetchEmailsForIngest */
@@ -232,17 +255,18 @@ export async function fetchUnreadEmails() {
 export async function markEmailAsSeen(uid) {
   if (!isImapConfigured()) return;
 
-  const client = createImapClient();
+  return runExclusiveImapOperation('IMAP mark seen', async () => {
+    const client = createImapClient();
+    const mailbox = process.env.EMAIL_IMAP_MAILBOX || 'INBOX';
 
-  const mailbox = process.env.EMAIL_IMAP_MAILBOX || 'INBOX';
+    await client.connect();
+    const lock = await client.getMailboxLock(mailbox);
 
-  await client.connect();
-  const lock = await client.getMailboxLock(mailbox);
-
-  try {
-    await client.messageFlagsAdd({ uid }, ['\\Seen']);
-  } finally {
-    lock.release();
-    await client.logout();
-  }
+    try {
+      await client.messageFlagsAdd({ uid }, ['\\Seen']);
+    } finally {
+      lock.release();
+      await client.logout();
+    }
+  });
 }

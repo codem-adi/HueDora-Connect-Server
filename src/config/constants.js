@@ -66,6 +66,9 @@ export const ROLE_PERMISSIONS = {
     'users:read',
     'users:create',
     'users:update',
+    'communications:read',
+    'communications:manage',
+    'communications:configure',
   ],
   [ROLES.OPERATIONS_EXECUTIVE]: [
     'dashboard:read',
@@ -78,6 +81,9 @@ export const ROLE_PERMISSIONS = {
     'client-masters:read',
     'client-masters:create',
     'client-masters:update',
+    'communications:read',
+    'communications:manage',
+    'communications:configure',
   ],
   [ROLES.REVIEWER]: [
     'camps:read',

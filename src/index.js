@@ -14,6 +14,7 @@ import importRoutes from './routes/importRoutes.js';
 import userRoutes from './routes/userRoutes.js';
 import whatsappRoutes from './routes/whatsappRoutes.js';
 import emailRoutes from './routes/emailRoutes.js';
+import communicationsRoutes from './routes/communicationsRoutes.js';
 import { errorHandler, notFound } from './middleware/errorHandler.js';
 import { trimRequest } from './middleware/trimRequest.js';
 import { startEmailPoller } from './services/emailPoller.js';
@@ -58,6 +59,7 @@ app.use('/api/client-masters', clientMasterRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/import', importRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/communications', communicationsRoutes);
 
 app.use(notFound);
 app.use(errorHandler);

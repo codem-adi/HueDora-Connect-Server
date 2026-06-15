@@ -4,6 +4,7 @@ import User from '../models/User.js';
 import { ensureServiceUsers, ensurePendingEmailClient } from './ensureServiceUsers.js';
 import { logAudit } from './auditService.js';
 import { createCampFromRow } from './campCreationService.js';
+import { CampDuplicateError } from '../utils/campDuplicateHelpers.js';
 import { sendEmailReply, normalizeEmailAddress, isEmailReplyEnabled } from './emailClient.js';
 import { parseExcelBuffer } from '../utils/excelParser.js';
 import {
@@ -20,10 +21,7 @@ import { getMissingStandardHeaders, getStandardMapping } from '../utils/sampleEx
 import { buildEmailAutoReply } from '../utils/emailReplyTemplates.js';
 import { appendIngestReviewRemarks } from '../utils/ingestReviewNotes.js';
 import { logIngestError } from '../utils/processSafety.js';
-import {
-  markEmailMessageHandled,
-  wasEmailMessageHandled,
-} from './emailIngestSince.js';
+import { ingestWebhookEmailToInbox, syncImapMailbox } from './inboundEmailService.js';
 
 function buildIngestId(messageId, rowNumber) {
   return `${messageId}#${rowNumber}`;
@@ -58,7 +56,7 @@ export async function resolveCreatedByEmail(senderEmail) {
   return serviceUser;
 }
 
-async function resolveClientForEmail(row, searchText) {
+export async function resolveClientForEmail(row, searchText) {
   const clients = await Client.find({ deletedAt: null, isActive: true });
   const clientName = String(row.clientName || '').trim();
 
@@ -76,18 +74,19 @@ async function resolveClientForEmail(row, searchText) {
   return ensurePendingEmailClient();
 }
 
-async function createCampFromEmailRow({
+export async function createCampFromEmailRow({
   row,
   rowNumber,
   messageId,
   emailMeta,
   createdBy,
   submittedAt,
+  skipReviewRemarks = false,
 }) {
   const ingestId = buildIngestId(messageId, rowNumber);
   const existing = await campExists(ingestId);
   if (existing) {
-    return { status: 'duplicate', campId: existing.campId, ingestId };
+    return { status: 'duplicate', id: existing._id, campId: existing.campId, ingestId };
   }
 
   const client = await resolveClientForEmail(
@@ -95,20 +94,37 @@ async function createCampFromEmailRow({
     `${emailMeta.subject}\n${emailMeta.rawBody}`
   );
 
-  const camp = await createCampFromRow({
-    row: appendIngestReviewRemarks(row, client),
-    client,
-    createdBy,
-    source: 'email',
-    submittedAt,
-    extras: {
-      emailIngestId: ingestId,
-      emailMessageId: messageId,
-      emailSender: emailMeta.from,
-      emailSubject: emailMeta.subject,
-      emailRawBody: emailMeta.rawBody,
-    },
-  });
+  let camp;
+  try {
+    camp = await createCampFromRow({
+      row: skipReviewRemarks
+        ? { ...row, remarks: '' }
+        : appendIngestReviewRemarks(row, client),
+      client,
+      createdBy,
+      source: 'email',
+      submittedAt,
+      extras: {
+        emailIngestId: ingestId,
+        emailMessageId: messageId,
+        emailSender: emailMeta.from,
+        emailSubject: emailMeta.subject,
+        emailRawBody: emailMeta.rawBody,
+      },
+    });
+  } catch (error) {
+    if (error instanceof CampDuplicateError) {
+      return {
+        status: 'duplicate',
+        id: error.existingCamp._id,
+        campId: error.existingCamp.campId,
+        ingestId,
+        rowNumber,
+        reason: error.message,
+      };
+    }
+    throw error;
+  }
 
   try {
     await logAudit({
@@ -137,6 +153,7 @@ async function createCampFromEmailRow({
 
   return {
     status: 'created',
+    id: camp._id,
     campId: camp.campId,
     ingestId,
     rowNumber,
@@ -373,45 +390,5 @@ async function processIncomingEmailUnsafe(email, channel = 'unknown') {
 }
 
 export async function pollImapInbox() {
-  const { fetchEmailsForIngest, markEmailAsSeen } = await import('./emailClient.js');
-  const emails = await fetchEmailsForIngest();
-  const summaries = [];
-
-  for (const email of emails) {
-    if (wasEmailMessageHandled(email.messageId)) {
-      continue;
-    }
-
-    try {
-      const summary = await processIncomingEmail(email, 'imap');
-      summaries.push(summary);
-
-      if (summary.status !== 'error') {
-        markEmailMessageHandled({
-          messageId: email.messageId,
-          receivedAt: email.receivedAt,
-          uid: email.uid,
-        });
-      }
-
-      if (email.uid && summary.status !== 'error') {
-        await markEmailAsSeen(email.uid);
-      }
-    } catch (error) {
-      logIngestError('email', error, {
-        action: 'imap-message',
-        messageId: email.messageId,
-      });
-      summaries.push({
-        status: 'error',
-        messageId: email.messageId,
-        error: error.message,
-      });
-    }
-  }
-
-  return {
-    processed: summaries.length,
-    summaries,
-  };
+  return syncImapMailbox();
 }
